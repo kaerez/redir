@@ -49,10 +49,11 @@ blog.value = "https://example.com/blog"
 ### Hierarchy & Logic
 When a user visits a URL, the engine resolves conflicts in this order:
 
-1.  **Domain Strict Mode:** If `strict = true`, global defaults are ignored (except for 404/method fallbacks).
-2.  **Explicit Priority:** Keys with `key.priority = true` always win.
-3.  **Global Priority:** Default keys win *unless* the domain has `priority = true`.
-4.  **Fallback:** Domain values are used if no default exists.
+1.  **Strict Mode:** If a domain has `strict = true`, all global defaults are ignored (except for 404/method fallbacks).
+2.  **Explicit Link Priority:** If the specific link key has `key.priority = true`, the **Domain Link Wins**.
+3.  **Domain Priority:** If the `[domain]` has `priority = true`, the **Domain Link Wins**.
+4.  **Global Delegation:** If `[default]` has `priority = true`, it grants priority to domains. **Domain Link Wins**.
+5.  **Centralized Control (Fallback):** If none of the above are true (default is `false` or missing), the **Default Link Wins**.
 
 ---
 
@@ -80,8 +81,7 @@ You can inject parts of the incoming URL into the destination URL using Handleba
 
 ## 📝 License
 
-This project is dual-licensed under the **GNU Affero General Public License v3.0 (AGPLv3)** 
-and a **Commercial License**. See [LICENSE](LICENSE).
+This project is dual-licensed under the **GNU Affero General Public License v3.0 (AGPLv3)** and a **Commercial License**. See [LICENSE](LICENSE).
 
 ### Option 1: Open Source (AGPLv3)
 For open-source projects, you may use this software under the terms of the AGPLv3. 
