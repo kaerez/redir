@@ -1,24 +1,19 @@
 # Contributor License Agreement (CLA)
 
-By submitting a Pull Request or contributing code to this project, you agree to the following  
-terms regarding your contribution:
+Thank you for your interest in contributing! To protect the project and its users, we require all contributors to agree to this CLA.
 
-## 1. Ownership and Grant of Rights
-You retain ownership of the copyright in your contribution. However, by submitting a  
-contribution, you grant KSEC - Erez Kalman (the "Project Lead") a non-exclusive,  
-irrevocable, worldwide, royalty-free, sublicensable, and transferable license to:
-- Use, modify, and distribute your contribution under the terms of the AGPLv3.
-- Use, modify, and distribute your contribution as part of a Commercial License (sold to
-  third parties).
-- Change the project's primary license in the future (e.g., to a newer version of AGPL).
+### 1. License Grant
+By submitting a contribution to this project, you grant **KSEC - Erez Kalman** a non-exclusive, perpetual, irrevocable, worldwide, royalty-free, and transferable license to use, reproduce, modify, and distribute your contribution. 
 
-## 2. Representations
-You represent that:
-- The contribution is your original work and you have the right to grant these permissions.
-- The contribution does not, to the best of your knowledge, infringe any third-party
-  patents or copyrights.
+This includes the right for us to:
+*   Distribute the contribution under the **AGPLv3**.
+*   Distribute the contribution under **Commercial Licenses** sold to third parties.
 
-## 3. Acceptance of Terms
-You acknowledge that you are providing these rights to ensure the project remains sustainable  
-and that the Project Lead may monetize the project through commercial licensing. Submitting a  
-Pull Request or Issue or Comment or Reply constitutes your agreement to these terms.
+### 2. Ownership
+You retain full ownership of the copyright in your contribution; you are simply granting us the rights to use and re-license it.
+
+### 3. Representations
+You represent that you are legally entitled to grant this license and that your contribution is your original work.
+
+### 4. Acceptance
+**By submitting a Pull Request and commenting "I have read the CLA and I hereby sign it" (or similar) or any other interaction, you agree to these terms.**
