@@ -1,17 +1,40 @@
-// Copyright (c) 2026 KSEC - Erez Kalman.
-// This software is dual-licensed under the AGPLv3 and a commercial license.
-// See the LICENSE file in the project root (https://www.github.com/kaerez/redir) for more information.
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    /*
+    Copyright (c) 2026 KSEC - Erez Kalman.
+    This software is dual-licensed under the AGPLv3 and a commercial license.
+    See the LICENSE file in the project root (https://www.github.com/kaerez/redir) for more information.
+    */
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resolving...</title>
     <style>
-        body { font-family: monospace; text-align: center; padding-top: 20vh; color: #333; background: #f9f9f9; }
-        .loader { font-size: 1.2rem; font-weight: bold; }
-        .error { color: #d9534f; margin-top: 10px; white-space: pre-wrap; text-align: left; display: inline-block; max-width: 80%; }
+        /* Clean white background, no default margins */
+        body { 
+            font-family: monospace; 
+            text-align: center; 
+            padding-top: 20vh; 
+            color: #333; 
+            background: #ffffff; /* Pure white */
+            margin: 0;
+        }
+        /* Loader is hidden by default to keep screen clean */
+        .loader { 
+            font-size: 1.2rem; 
+            font-weight: bold; 
+            display: none; /* Hides "Processing..." */
+        }
+        /* Errors will still show up red if something breaks */
+        .error { 
+            color: #d9534f; 
+            margin-top: 10px; 
+            white-space: pre-wrap; 
+            text-align: left; 
+            display: inline-block; 
+            max-width: 80%; 
+            display: block; /* Force show if class changes to error */
+        }
     </style>
 </head>
 <body>
@@ -22,7 +45,7 @@
         // ---------------------------------------------------------
         // 1. SETUP & UTILS
         // ---------------------------------------------------------
-        const CONFIG_URL = './config.toml';
+        const CONFIG_URL = '/config.toml';
         const PARSER_CDN = 'https://cdn.jsdelivr.net/npm/smol-toml@1.1.2/dist/index.js';
 
         async function loadParser() {
@@ -101,7 +124,6 @@
             const domEntry = domParent ? domParent[targetKey] : undefined;
 
             // --- STRICT MODE CHECK ---
-            // If strict=true, we ONLY check domain. Default is completely ignored (for Link Resolution).
             if (domainConfig.strict) {
                 if (domEntry) return { entry: domEntry, source: 'domain' };
                 return null;
@@ -111,25 +133,14 @@
             
             // Case 1: Collision (Entry exists in BOTH)
             if (domEntry && defEntry) {
-                // A. Link Priority: Does Domain Link have priority=true? -> Domain Wins
                 if (domEntry.priority === true) return { entry: domEntry, source: 'domain' };
-
-                // B. Domain Priority: Does Domain have priority=true? -> Domain Wins
                 if (domainConfig.priority === true) return { entry: domEntry, source: 'domain' };
-
-                // C. Default "Delegation" Priority: Does Default have priority=true? -> Domain Wins
-                // (Scenario A: Default grants priority to domains)
                 if (defaults.priority === true) return { entry: domEntry, source: 'domain' };
-
-                // D. Fallback: Default Wins
-                // (Scenario B: Default is false/missing, so Centralized Control wins)
                 return { entry: defEntry, source: 'default' };
             }
 
             // Case 2: No Collision (Only exists in one place)
             if (domEntry) return { entry: domEntry, source: 'domain' };
-            
-            // Case 3: Default Only (And Strict Mode was false)
             if (defEntry) return { entry: defEntry, source: 'default' };
 
             return null; // Not found
@@ -142,12 +153,8 @@
             return urlStr.replace(/\{\{([a-zA-Z0-9_.\-"']+)\}\}/g, (match, tag) => {
                 let val = "";
                 
-                // {{key}} - Full Path + Query
                 if (tag === 'key') val = data.fullKey;
-                // {{rawkey}} - FQDN
                 else if (tag === 'rawkey') val = window.location.href;
-                
-                // {{keyN...}} logic
                 else if (tag.startsWith('key')) {
                     const firstDot = tag.indexOf('.');
                     let indexPart = (firstDot === -1) ? tag.substring(3) : tag.substring(3, firstDot);
@@ -157,8 +164,6 @@
                     
                     if (!isNaN(idx) && data.segments[idx] !== undefined) {
                         let segmentBase = data.segments[idx];
-                        
-                        // If it's the LAST segment, append global query string to base
                         if (idx === data.segments.length - 1 && data.globalQuery) {
                             segmentBase += data.globalQuery;
                         }
@@ -166,16 +171,12 @@
                         if (!paramPart) {
                             val = segmentBase;
                         } else {
-                            // Query Parameter Extraction: {{keyN.param}}
-                            
-                            // 1. Clean Quotes
                             let cleanParam = paramPart;
                             if ((cleanParam.startsWith('"') && cleanParam.endsWith('"')) || 
                                 (cleanParam.startsWith("'") && cleanParam.endsWith("'"))) {
                                 cleanParam = cleanParam.slice(1, -1).replace(/\\(["'])/g, "$1");
                             }
 
-                            // 2. Parse Index (e.g., brave1 vs brave)
                             const match = cleanParam.match(/^(.*?)(\d+)$/);
                             let paramName = cleanParam;
                             let paramIdx = 0;
@@ -185,19 +186,16 @@
                                 paramIdx = parseInt(match[2], 10);
                             }
 
-                            // 3. Extract from URLSearchParams
                             const params = new URLSearchParams(data.globalQuery);
                             const allValues = params.getAll(paramName);
                             
                             if (allValues.length > paramIdx) {
                                 val = allValues[paramIdx];
-                            } else {
-                                val = ""; // Index out of bounds or param missing
                             }
                         }
                     }
                 }
-                return encodeURIComponent(val); // Strict Encoding Rule
+                return encodeURIComponent(val);
             });
         }
 
@@ -241,8 +239,8 @@
                 const entry = resolution.entry;
                 let finalUrl = (typeof entry === 'string') ? entry : entry.value;
                 
-                // Method Logic (Cascading: Entry > Domain > Default)
-                let method = 302; // Hard Fallback
+                // Method Logic
+                let method = 302; 
                 if (config.default && config.default.method) method = config.default.method;
                 
                 const domain = config.domains ? config.domains.find(d => d.host === loc.host) : null;
@@ -265,8 +263,10 @@
                 }
 
             } catch (e) {
-                document.getElementById('status').innerText = "System Error";
-                document.getElementById('error-log').innerText = e.message;
+                // Show error message on screen if something breaks
+                const errDiv = document.getElementById('error-log');
+                errDiv.style.display = 'block';
+                errDiv.innerText = e.message;
                 console.error(e);
             }
         }
@@ -277,10 +277,7 @@
             const domain = config.domains ? config.domains.find(d => d.host === host) : null;
             const def = config.default;
 
-            // 1. Default 404
             if (def && def['404']) url = def['404'];
-
-            // 2. Domain 404 (Overrides default - Logic: Domain has 404 -> Domain Used)
             if (domain && domain['404']) url = domain['404'];
 
             if (url) {
@@ -288,8 +285,11 @@
                 console.warn("404 Triggered. Redirecting to:", url);
                 window.location.replace(url);
             } else {
-                document.getElementById('status').className = 'error';
-                document.getElementById('status').innerText = "404 - Link not found (No redirect configured).";
+                // Only show 404 message if no redirect is configured
+                const statusDiv = document.getElementById('status');
+                statusDiv.style.display = 'block';
+                statusDiv.className = 'error';
+                statusDiv.innerText = "404 - Link not found";
             }
         }
 
