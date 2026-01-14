@@ -21,3 +21,12 @@ strict = true
 # 404 = "https://github.com/kaerez/redir" 
 
 isc2il.value = "https://isc2chapter-israel.org/"
+
+[[domains]]
+host = "go.isc2chapter-israel.org"
+priority = true
+strict = true
+# method = 302
+# 404 = "https://github.com/kaerez/redir" 
+
+g.value = "https://www.google.com"
