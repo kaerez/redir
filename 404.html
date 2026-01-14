@@ -78,7 +78,6 @@
             if (config.domains) {
                 domainConfig = config.domains.find(d => d.host === host);
             }
-            // Create dummy if missing to simplify logic
             if (!domainConfig) domainConfig = { host: host, strict: false }; 
 
             // Helper: Traverse TOML object by path segments
@@ -101,34 +100,36 @@
             const defEntry = defParent ? defParent[targetKey] : undefined;
             const domEntry = domParent ? domParent[targetKey] : undefined;
 
-            // --- HIERARCHY LOGIC (Top-to-Bottom) ---
-            
-            // Rule 1: DOMAIN-SPECIFIC STRICT MODE
-            // If strict=true, [default] values are ignored (except 404/method handled later).
+            // --- STRICT MODE CHECK ---
+            // If strict=true, we ONLY check domain. Default is completely ignored (for Link Resolution).
             if (domainConfig.strict) {
                 if (domEntry) return { entry: domEntry, source: 'domain' };
-                return null; // Key not found in strict domain
+                return null;
             }
 
-            // Rule 2: EXPLICIT PRIORITY (Key Level)
-            // If domain key has priority=true, it wins immediately.
-            if (domEntry && typeof domEntry === 'object' && domEntry.priority) {
-                return { entry: domEntry, source: 'domain' };
-            }
+            // --- COLLISION & PRIORITY LOGIC ---
             
-            // Rule 3: GLOBAL PRIORITY (Default Wins)
-            // If default has entry, and Domain/Key priority is NOT active, default wins.
-            const defaultHasPriority = (defaults.priority !== false); 
-            
-            if (defEntry && !domainConfig.priority && defaultHasPriority) {
+            // Case 1: Collision (Entry exists in BOTH)
+            if (domEntry && defEntry) {
+                // A. Link Priority: Does Domain Link have priority=true? -> Domain Wins
+                if (domEntry.priority === true) return { entry: domEntry, source: 'domain' };
+
+                // B. Domain Priority: Does Domain have priority=true? -> Domain Wins
+                if (domainConfig.priority === true) return { entry: domEntry, source: 'domain' };
+
+                // C. Default "Delegation" Priority: Does Default have priority=true? -> Domain Wins
+                // (Scenario A: Default grants priority to domains)
+                if (defaults.priority === true) return { entry: domEntry, source: 'domain' };
+
+                // D. Fallback: Default Wins
+                // (Scenario B: Default is false/missing, so Centralized Control wins)
                 return { entry: defEntry, source: 'default' };
             }
 
-            // Rule 4: FALLBACK
-            // Use domain if: no default, OR default priority disabled, OR domain has priority
+            // Case 2: No Collision (Only exists in one place)
             if (domEntry) return { entry: domEntry, source: 'domain' };
             
-            // Final Fallback
+            // Case 3: Default Only (And Strict Mode was false)
             if (defEntry) return { entry: defEntry, source: 'default' };
 
             return null; // Not found
@@ -240,21 +241,19 @@
                 const entry = resolution.entry;
                 let finalUrl = (typeof entry === 'string') ? entry : entry.value;
                 
-                // Method Logic (Cascading)
-                let method = 302; // Hard Fallback (HTTP Standard)
+                // Method Logic (Cascading: Entry > Domain > Default)
+                let method = 302; // Hard Fallback
                 if (config.default && config.default.method) method = config.default.method;
                 
                 const domain = config.domains ? config.domains.find(d => d.host === loc.host) : null;
                 if (domain && domain.method) method = domain.method; 
                 
-                // Entry overrides all
                 if (typeof entry === 'object' && entry.method) method = entry.method;
 
                 // Apply Templating
                 finalUrl = applyTemplate(finalUrl, templateData);
 
                 // Execute Redirect
-                // Check for Local File (starts with /)
                 if (finalUrl.startsWith('/')) {
                     window.location.replace(finalUrl);
                 } else {
@@ -273,7 +272,7 @@
         }
 
         function handle404(config, host, data) {
-            let url = null; // Corrected: No hardcoded fallback
+            let url = null; 
             
             const domain = config.domains ? config.domains.find(d => d.host === host) : null;
             const def = config.default;
@@ -281,7 +280,7 @@
             // 1. Default 404
             if (def && def['404']) url = def['404'];
 
-            // 2. Domain 404 (Overrides default even in strict mode per logic)
+            // 2. Domain 404 (Overrides default - Logic: Domain has 404 -> Domain Used)
             if (domain && domain['404']) url = domain['404'];
 
             if (url) {
@@ -289,7 +288,6 @@
                 console.warn("404 Triggered. Redirecting to:", url);
                 window.location.replace(url);
             } else {
-                // If no 404 defined in config, stay here and show error
                 document.getElementById('status').className = 'error';
                 document.getElementById('status').innerText = "404 - Link not found (No redirect configured).";
             }
