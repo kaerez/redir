@@ -1,0 +1,303 @@
+/*
+Copyright (c) 2026 KSEC - Erez Kalman.
+This software is dual-licensed under the AGPLv3 and a commercial license.
+See the LICENSE file in the project root (https://www.github.com/kaerez/redir) for more information.
+*\
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resolving...</title>
+    <style>
+        body { font-family: monospace; text-align: center; padding-top: 20vh; color: #333; background: #f9f9f9; }
+        .loader { font-size: 1.2rem; font-weight: bold; }
+        .error { color: #d9534f; margin-top: 10px; white-space: pre-wrap; text-align: left; display: inline-block; max-width: 80%; }
+    </style>
+</head>
+<body>
+    <div id="status" class="loader">Processing...</div>
+    <div id="error-log" class="error"></div>
+
+    <script type="module">
+        // ---------------------------------------------------------
+        // 1. SETUP & UTILS
+        // ---------------------------------------------------------
+        const CONFIG_URL = '/config.toml';
+        const PARSER_CDN = 'https://cdn.jsdelivr.net/npm/smol-toml@1.1.2/dist/index.js';
+
+        async function loadParser() {
+            try { return (await import('/smol-toml/index.js')).parse; }
+            catch { return (await import(PARSER_CDN)).parse; }
+        }
+
+        // Recursive Decode (Max Depth 5)
+        function safeDecode(str) {
+            let decoded = str;
+            let depth = 0;
+            while (decoded.includes('%') && depth < 5) {
+                try {
+                    let next = decodeURIComponent(decoded);
+                    if (next === decoded) break;
+                    decoded = next;
+                } catch { break; }
+                depth++;
+            }
+            return decoded;
+        }
+
+        // Sanitize & Normalize URL
+        function getSanitizedLocation() {
+            let rawPath = window.location.pathname.replace(/^\/|\/$/g, '');
+            let rawQuery = window.location.search; 
+
+            // Security: Input Limit
+            if (rawPath.length > 2048 || rawQuery.length > 2048) {
+                throw new Error("Security Violation: URL segment exceeds 2048 characters.");
+            }
+
+            // Normalization: Recursive Decode -> UTF-8 NFC -> Collapse Slashes -> Lowercase
+            const safePath = safeDecode(rawPath).normalize('NFC'); 
+            const normalizedPath = safePath.replace(/\/{2,}/g, '/').toLowerCase(); 
+            
+            return {
+                rawPath: rawPath, 
+                normalizedPath: normalizedPath, // Used for matching
+                query: rawQuery,
+                host: window.location.hostname
+            };
+        }
+
+        // ---------------------------------------------------------
+        // 2. CONFLICT RESOLUTION ENGINE
+        // ---------------------------------------------------------
+        function resolveKey(config, host, pathSegments) {
+            const defaults = config.default || {};
+            
+            // Find Domain Config
+            let domainConfig = null;
+            if (config.domains) {
+                domainConfig = config.domains.find(d => d.host === host);
+            }
+            // Create dummy if missing to simplify logic
+            if (!domainConfig) domainConfig = { host: host, strict: false }; 
+
+            // Helper: Traverse TOML object by path segments
+            function findValue(root, segments) {
+                let current = root;
+                for (let seg of segments) {
+                    if (current && current[seg]) current = current[seg];
+                    else return undefined;
+                }
+                return current;
+            }
+
+            const targetKey = pathSegments[pathSegments.length - 1]; 
+            const parentSegments = pathSegments.slice(0, -1);
+            
+            // Lookups (Parent Table + Key)
+            const defParent = findValue(defaults, parentSegments);
+            const domParent = findValue(domainConfig, parentSegments);
+
+            const defEntry = defParent ? defParent[targetKey] : undefined;
+            const domEntry = domParent ? domParent[targetKey] : undefined;
+
+            // --- HIERARCHY LOGIC (Top-to-Bottom) ---
+            
+            // Rule 1: DOMAIN-SPECIFIC STRICT MODE
+            // If strict=true, [default] values are ignored (except 404/method handled later).
+            if (domainConfig.strict) {
+                if (domEntry) return { entry: domEntry, source: 'domain' };
+                return null; // Key not found in strict domain
+            }
+
+            // Rule 2: EXPLICIT PRIORITY (Key Level)
+            // If domain key has priority=true, it wins immediately.
+            if (domEntry && typeof domEntry === 'object' && domEntry.priority) {
+                return { entry: domEntry, source: 'domain' };
+            }
+            
+            // Rule 3: GLOBAL PRIORITY (Default Wins)
+            // If default has entry, and Domain/Key priority is NOT active, default wins.
+            const defaultHasPriority = (defaults.priority !== false); 
+            
+            if (defEntry && !domainConfig.priority && defaultHasPriority) {
+                return { entry: defEntry, source: 'default' };
+            }
+
+            // Rule 4: FALLBACK
+            // Use domain if: no default, OR default priority disabled, OR domain has priority
+            if (domEntry) return { entry: domEntry, source: 'domain' };
+            
+            // Final Fallback
+            if (defEntry) return { entry: defEntry, source: 'default' };
+
+            return null; // Not found
+        }
+
+        // ---------------------------------------------------------
+        // 3. TEMPLATING ENGINE
+        // ---------------------------------------------------------
+        function applyTemplate(urlStr, data) {
+            return urlStr.replace(/\{\{([a-zA-Z0-9_.\-"']+)\}\}/g, (match, tag) => {
+                let val = "";
+                
+                // {{key}} - Full Path + Query
+                if (tag === 'key') val = data.fullKey;
+                // {{rawkey}} - FQDN
+                else if (tag === 'rawkey') val = window.location.href;
+                
+                // {{keyN...}} logic
+                else if (tag.startsWith('key')) {
+                    const firstDot = tag.indexOf('.');
+                    let indexPart = (firstDot === -1) ? tag.substring(3) : tag.substring(3, firstDot);
+                    let paramPart = (firstDot === -1) ? null : tag.substring(firstDot + 1);
+
+                    const idx = parseInt(indexPart, 10);
+                    
+                    if (!isNaN(idx) && data.segments[idx] !== undefined) {
+                        let segmentBase = data.segments[idx];
+                        
+                        // If it's the LAST segment, append global query string to base
+                        if (idx === data.segments.length - 1 && data.globalQuery) {
+                            segmentBase += data.globalQuery;
+                        }
+
+                        if (!paramPart) {
+                            val = segmentBase;
+                        } else {
+                            // Query Parameter Extraction: {{keyN.param}}
+                            
+                            // 1. Clean Quotes
+                            let cleanParam = paramPart;
+                            if ((cleanParam.startsWith('"') && cleanParam.endsWith('"')) || 
+                                (cleanParam.startsWith("'") && cleanParam.endsWith("'"))) {
+                                cleanParam = cleanParam.slice(1, -1).replace(/\\(["'])/g, "$1");
+                            }
+
+                            // 2. Parse Index (e.g., brave1 vs brave)
+                            const match = cleanParam.match(/^(.*?)(\d+)$/);
+                            let paramName = cleanParam;
+                            let paramIdx = 0;
+
+                            if (match) {
+                                paramName = match[1];
+                                paramIdx = parseInt(match[2], 10);
+                            }
+
+                            // 3. Extract from URLSearchParams
+                            const params = new URLSearchParams(data.globalQuery);
+                            const allValues = params.getAll(paramName);
+                            
+                            if (allValues.length > paramIdx) {
+                                val = allValues[paramIdx];
+                            } else {
+                                val = ""; // Index out of bounds or param missing
+                            }
+                        }
+                    }
+                }
+                return encodeURIComponent(val); // Strict Encoding Rule
+            });
+        }
+
+        // ---------------------------------------------------------
+        // 4. MAIN EXECUTION
+        // ---------------------------------------------------------
+        async function init() {
+            try {
+                const parseTOML = await loadParser();
+                
+                // Fetch Config
+                const resp = await fetch(CONFIG_URL);
+                if (!resp.ok) throw new Error("Config file missing");
+                const config = parseTOML(await resp.text());
+
+                // Get Context
+                const loc = getSanitizedLocation();
+                
+                // Split Path
+                let segments = loc.normalizedPath ? loc.normalizedPath.split('/') : [];
+                
+                // Find Resolution
+                let resolution = null;
+                if (segments.length > 0) {
+                    resolution = resolveKey(config, loc.host, segments);
+                }
+
+                // Prepare Data for Template
+                const templateData = {
+                    fullKey: loc.normalizedPath + loc.query,
+                    segments: segments,
+                    globalQuery: loc.query
+                };
+
+                // Handle Not Found
+                if (!resolution) {
+                    handle404(config, loc.host, templateData);
+                    return;
+                }
+
+                const entry = resolution.entry;
+                let finalUrl = (typeof entry === 'string') ? entry : entry.value;
+                
+                // Method Logic (Cascading)
+                let method = 302; // Hard Fallback (HTTP Standard)
+                if (config.default && config.default.method) method = config.default.method;
+                
+                const domain = config.domains ? config.domains.find(d => d.host === loc.host) : null;
+                if (domain && domain.method) method = domain.method; 
+                
+                // Entry overrides all
+                if (typeof entry === 'object' && entry.method) method = entry.method;
+
+                // Apply Templating
+                finalUrl = applyTemplate(finalUrl, templateData);
+
+                // Execute Redirect
+                // Check for Local File (starts with /)
+                if (finalUrl.startsWith('/')) {
+                    window.location.replace(finalUrl);
+                } else {
+                    if (method === 301 || method === 308) {
+                        window.location.replace(finalUrl);
+                    } else {
+                        window.location.href = finalUrl;
+                    }
+                }
+
+            } catch (e) {
+                document.getElementById('status').innerText = "System Error";
+                document.getElementById('error-log').innerText = e.message;
+                console.error(e);
+            }
+        }
+
+        function handle404(config, host, data) {
+            let url = null; // Corrected: No hardcoded fallback
+            
+            const domain = config.domains ? config.domains.find(d => d.host === host) : null;
+            const def = config.default;
+
+            // 1. Default 404
+            if (def && def['404']) url = def['404'];
+
+            // 2. Domain 404 (Overrides default even in strict mode per logic)
+            if (domain && domain['404']) url = domain['404'];
+
+            if (url) {
+                url = applyTemplate(url, data);
+                console.warn("404 Triggered. Redirecting to:", url);
+                window.location.replace(url);
+            } else {
+                // If no 404 defined in config, stay here and show error
+                document.getElementById('status').className = 'error';
+                document.getElementById('status').innerText = "404 - Link not found (No redirect configured).";
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
