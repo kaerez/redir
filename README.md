@@ -27,6 +27,19 @@ A serverless, zero-maintenance URL shortener and redirect engine that runs entir
 
 ---
 
+## 🪏 Getting Other Domains To Work
+
+Since GH Pages limits to one domain, you can use [worker.js](worker.js) to get other domains to work as well.  
+1. Set up a Cloudflare Worker.
+2. Use the provided script.
+3. Configure an environmental variable 'TARGET_HOSTNAME' to your primary domain used with GH Pages, E.g. 'secw.net' in our case.
+4. Route the other domains to the worker.
+
+FYI: You can also configure specific overrides, for example to have 'example.com' use another GH Pages at 'example.org'  
+     just add an environmental variable 'example.com' with a value of 'example.org'.
+
+---
+
 ## ⚙️ Configuration (`config.toml`)
 
 The system relies on a `config.toml` file (see [config.toml.example](config.toml.example)).
