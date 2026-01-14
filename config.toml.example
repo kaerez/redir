@@ -1,0 +1,108 @@
+# ==============================================================================
+# GLOBAL DEFAULTS
+# ==============================================================================
+[default]
+method = 302
+404 = "https://www.google.com" 
+
+# PRIORITY SETTING (Collision Logic):
+# false (Default) or missing = Centralized Mode. If a collision occurs, [default] link wins.
+# true                       = Delegated Mode.   If a collision occurs, [domain] link wins.
+priority = false 
+
+# [Collision Example: Centralized Wins]
+# If priority = false (Centralized Mode) or missing, this link will OVERRIDE 
+# any domain that tries to define 'hr' (unless that domain forces priority, or the link has override).
+# If a domain defines 'hr', it will be ignored in favor of this one.
+hr.value = "https://corp.com/global-hr"
+
+# [Simple Fallback]
+# Domains without 'meet' will use this, unless domain has strict = true.
+meet.value = "https://meet.google.com/generic"
+
+
+# ==============================================================================
+# SCENARIO A: STANDARD DOMAIN (Centralized Control)
+# ==============================================================================
+[[domains]]
+host = "team.corp.com"
+
+# [Collision: Default Wins]
+# We try to define 'hr' here.
+# But [default].priority is false (Centralized).
+# And [domain] priority is missing (false), and link override is missing (false).
+# RESULT: IGNORED. Users go to https://corp.com/global-hr
+hr.value = "https://team.corp.com/hr-is-ignored"
+
+# [No Collision]
+# 'blog' is not in default, so this works fine.
+blog.value = "https://team.corp.com/blog"
+
+
+# ==============================================================================
+# SCENARIO B: LINK OVERRIDE (Specific Key Fights Back)
+# ==============================================================================
+[[domains]]
+host = "vip.corp.com"
+
+# [Collision: Domain Wins via Key Priority]
+# We want to override the global 'hr'.
+# We add 'priority = true' to the KEY itself.
+# RESULT: USES https://vip.corp.com/concierge
+hr.value = "https://vip.corp.com/concierge"
+hr.priority = true
+
+
+# ==============================================================================
+# SCENARIO C: DOMAIN OVERRIDE (Domain Fights Back)
+# ==============================================================================
+[[domains]]
+host = "subsidiary.com"
+priority = true # Sets this domain to always win collisions against default
+
+# [Collision: Domain Wins via Domain Priority]
+# Even though [default].priority is false (or missing), this domain has priority = true.
+# RESULT: USES https://subsidiary.com/local-hr
+hr.value = "https://subsidiary.com/local-hr"
+
+
+# ==============================================================================
+# SCENARIO D: STRICT MODE (Isolation)
+# ==============================================================================
+[[domains]]
+host = "secure.site.com"
+strict = true # Ignores ALL default values (except 404/method fallbacks)
+
+# [Strict Isolation]
+# Visiting 'meet' (defined in default) will 404 here.
+# Visiting 'hr' (defined in default) will 404 here.
+
+
+# ==============================================================================
+# SCENARIO E: ADVANCED TEMPLATING
+# ==============================================================================
+[[domains]]
+host = "track.agency.com"
+method = 307
+
+# [Path Segment & Query Param Extraction]
+# Input: track.agency.com/click/summer/index?ref=fb
+# Note: We use 3 segments so 'summer' (Key 1) is clean. 
+#       'index' (Key 2) captures the query string '?ref=fb'.
+# Output: https://target.com/?c=summer&s=fb
+# {{key1}} = "summer"
+# {{key2.ref}} = "fb"
+click.value = "https://target.com/?c={{key1}}&s={{key2.ref}}"
+
+# [Handling Quotes in Params]
+# Input: track.agency.com/search?q="shoes"
+# Output: https://shop.com/search/shoes
+# The quotes in the param name are handled by the template engine.
+search.value = "https://shop.com/search/{{key0.q}}"
+
+# [Indexed Params]
+# Input: track.agency.com/compare?id=100&id=200
+# Output: https://shop.com/vs/100/200
+# {{key0.id}} = 100 (first value)
+# {{key0.id1}} = 200 (second value)
+compare.value = "https://shop.com/vs/{{key0.id}}/{{key0.id1}}"
