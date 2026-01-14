@@ -23,5 +23,7 @@ jobs:
         with:
           path-to-signatures: 'signatures/cla.json'
           path-to-cla: 'github.com{{ github.repository }}/blob/main/CONTRIBUTING.md'
+          # Exempt
+          allowlist: 'kaerez,dependabot[bot],github-actions[bot]' 
           # Custom message to guide users
           custom-notsigned-prcomment: 'Thank you for your submission! Please read our [CLA](github.com{{ github.repository }}/blob/main/CONTRIBUTING.md) and reply to this comment with: **I have read the CLA and I hereby sign it**'
