@@ -1,0 +1,23 @@
+# ==============================================================================
+# GLOBAL DEFAULTS
+# ==============================================================================
+[default]
+method = 302
+404 = "https://github.com/kaerez/redir" 
+
+# PRIORITY SETTING (Collision Logic):
+# false (Default) or missing = Centralized Mode. If a collision occurs, [default] link wins.
+# true                       = Delegated Mode.   If a collision occurs, [domain] link wins.
+priority = true 
+
+# ==============================================================================
+# DOMAINS
+# ==============================================================================
+[[domains]]
+host = "secw.net"
+priority = true
+strict = true
+# method = 302
+# 404 = "https://github.com/kaerez/redir" 
+
+isc2il.value = "https://isc2chapter-israel.org/"
